@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  REVIEWER
+  STUDENT
+}
+
+enum SubmissionStatus {
+  DRAFT
+  PENDING_PAYMENT
+  SUBMITTED
+  UNDER_REVIEW
+  REVISION_REQUESTED
+  ACCEPTED
+  REJECTED
+  PUBLISHED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum ReviewDecision {
+  ACCEPT
+  REJECT
+  REVISION
+}
+
+model User {
+  id         String   @id @default(uuid())
+  clerkId    String   @unique
+  email      String   @unique
+  name       String
+  role       UserRole @default(STUDENT)
+  isApproved Boolean  @default(false)
+  isBanned   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  submissions Submission[]
+  reviews     Review[]
+
+  @@index([clerkId])
+  @@index([email])
+}
+
+model Journal {
+  id            String   @id @default(uuid())
+  name          String
+  issn          String   @unique
+  description   String?
+  submissionFee Decimal  @default(500)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  submissions Submission[]
+}
+
+model Submission {
+  id                  String           @id @default(uuid())
+  title               String
+  abstract            String
+  keywords            String[]
+  journalId           String
+  primaryAuthorId     String
+  fileUrl             String?
+  status              SubmissionStatus @default(DRAFT)
+  isDraft             Boolean          @default(true)
+  declarationAccepted Boolean          @default(false)
+  submittedAt         DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  journal       Journal      @relation(fields: [journalId], references: [id])
+  primaryAuthor User         @relation(fields: [primaryAuthorId], references: [id])
+  authors       Author[]
+  payment       Payment?
+  reviews       Review[]
+  certificate   Certificate?
+
+  @@index([status])
+  @@index([primaryAuthorId])
+  @@index([journalId])
+}
+
+model Author {
+  id           String   @id @default(uuid())
+  submissionId String
+  name         String
+  email        String
+  institution  String
+  isPrimary    Boolean  @default(false)
+  orderIndex   Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  submissionId      String        @unique
+  amount            Decimal
+  currency          String        @default("INR")
+  status            PaymentStatus @default(PENDING)
+  razorpayOrderId   String        @unique
+  razorpayPaymentId String?       @unique
+  razorpaySignature String?
+  failureReason     String?
+  attempts          Int           @default(1)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  submission Submission @relation(fields: [submissionId], references: [id])
+}
+
+model Review {
+  id           String         @id @default(uuid())
+  submissionId String
+  reviewerId   String
+  comments     String
+  decision     ReviewDecision
+  submittedAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  submission Submission @relation(fields: [submissionId], references: [id])
+  reviewer   User       @relation(fields: [reviewerId], references: [id])
+
+  @@unique([submissionId, reviewerId])
+}
+
+model Certificate {
+  id             String   @id @default(uuid())
+  submissionId   String   @unique
+  certificateUrl String
+  uniqueId       String   @unique
+  issuedAt       DateTime
+  createdAt      DateTime @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id])
+}
